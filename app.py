@@ -1,51 +1,70 @@
 # app.py
 from flask import Flask, request, jsonify
-import openai
-import schedule
-import time
-import threading
+import os
+from dotenv import load_dotenv
+from openai import OpenAI
+load_dotenv()
 
 app = Flask(__name__)
 
-# Configure your OpenAI API key
-openai.api_key = 'YOUR_OPENAI_API_KEY'
+# Configure OpenAI client with DeepSeek base URL
+client = OpenAI(
+    api_key=os.getenv("DEEPSEEK_API_KEY"),
+    base_url="https://api.deepseek.com"
+)
 
-tasks = {}
+def generate_subtasks(user_input):
+    """
+    Use the DeepSeek API to generate subtasks based on the user's input.
+    """
+    # Craft a prompt for the AI to generate subtasks
+    prompt = f"""
+    The user has the following goal: "{user_input}".
+    Break this goal into smaller subtasks with estimated time to complete each subtask and a deadline for each.
+    Return the response in the following JSON format:
+    {{
+        "subtasks": [
+            {{
+                "task": "subtask description",
+                "time_required": "estimated time (e.g., 1 hour)",
+                "deadline": "deadline (e.g., 2023-10-15)"
+            }}
+        ]
+    }}
+    """
 
-@app.route('/task', methods=['POST'])
-def create_task():
-    data = request.json
-    task_name = data['task']
-    time_slot = data['time']  # Expected format 'HH:MM'
-    tasks[task_name] = time_slot
-    schedule.every().day.at(time_slot).do(check_in, task=task_name)
-    return jsonify({"status": "Task created", "task": task_name})
+    try:
+        response = client.chat.completions.create(
+            model="deepseek-chat",
+            messages=[
+                {"role": "user", "content": prompt}
+            ],
+            max_tokens=500
+        )
+        return response.choices[0].message.content
+    except Exception as e:
+        print(f"Error calling DeepSeek API: {str(e)}")
+        return None
 
-def check_in(task):
-    print(f"Checking in for task: {task}")
-    # Here you would implement a mechanism to ask the user if they're doing the task
-    user_response = input(f"Are you working on '{task}'? (yes/no): ")
-    if user_response.lower() == 'no':
-        reason = input("Why are you not doing it? ")
-        motivate_user(task, reason)
+@app.route('/breakdown', methods=['POST'])
+def task_breakdown():
+    """
+    Endpoint to handle task breakdown requests.
+    """
+    user_input = request.json.get("goal")
+    if not user_input:
+        return jsonify({"error": "No goal provided"}), 400
 
-def motivate_user(task, reason):
-    prompt = f"User is procrastinating on '{task}' due to '{reason}'. Motivate them."
-    response = openai.Completion.create(
-        model="text-davinci-003",
-        prompt=prompt,
-        max_tokens=100
-    )
-    message = response.choices[0].text.strip()
-    print(f"Motivational Message: {message}")
+    # Generate subtasks using the DeepSeek API
+    subtasks = generate_subtasks(user_input)
+    if subtasks:
+        return jsonify(subtasks)
+    else:
+        return jsonify({"error": "Failed to generate subtasks"}), 500
 
-def run_scheduler():
-    while True:
-        schedule.run_pending()
-        time.sleep(1)
+@app.route('/')
+def index():
+    return "Hello World"
 
 if __name__ == '__main__':
-    # Run the scheduler in a separate thread
-    scheduler_thread = threading.Thread(target=run_scheduler)
-    scheduler_thread.start()
     app.run(debug=True)
