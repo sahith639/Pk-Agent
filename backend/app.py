@@ -10,12 +10,13 @@ from bson import json_util  # To handle JSON serialization
 from datetime import datetime
 import json
 from openai import OpenAI
+from flask_cors import CORS  # Import CORS
 
 load_dotenv()
 
 
 app = Flask(__name__)
-
+CORS(app)  # Enable CORS for all routes
 # Configure MongoDB client
 mongo_uri = os.getenv("MONGO_URI")
 mongo_client = MongoClient(mongo_uri)
@@ -82,7 +83,16 @@ def task_breakdown():
             "created_at": datetime.now(),
         }
         tasks_collection.insert_one(task_document)
-        return jsonify(subtasks)
+
+        all_tasks = list(tasks_collection.find({}))
+        all_subtasks = []
+        for task in all_tasks:
+            subtasks_json_string = task.get("subtasks")
+            if subtasks_json_string:
+                subtasks = json.loads(subtasks_json_string)
+                all_subtasks.extend(subtasks)
+        
+        return jsonify(all_subtasks)
     else:
         return jsonify({"error": "Failed to generate subtasks"}), 500
 
@@ -102,7 +112,7 @@ def get_tasks():
         return all_subtasks
     except Exception as e:
         print(f"Error fetching tasks: {str(e)}")
-        return jsonify({"error": "Failed to fetch tasks"}), 500
+        return ({"error": "Failed to fetch tasks"}), 500
 
 
 @app.route("/")
