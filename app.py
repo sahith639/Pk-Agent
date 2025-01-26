@@ -1,4 +1,7 @@
 # app.py
+import schedule
+import threading
+import time
 from flask import Flask, request, jsonify
 import os
 from dotenv import load_dotenv
@@ -12,9 +15,14 @@ app = Flask(__name__)
 
 # Configure MongoDB client
 mongo_uri = os.getenv("MONGO_URI")
-mongo_client = MongoClient(mongo_uri)
+mongo_client = MongoClient("mongodb+srv://lokesh_beyondx:Lokesh@testdb.bv4vw6r.mongodb.net/")
 db = mongo_client["pk-agent"]  # Database name
 tasks_collection = db["tasks"]  # Collection for storing tasks
+sample_task ={
+            "task": "Review the homework instructions and gather all necessary materials",
+            "time_required": "30 minutes",
+            "deadline": "2023-10-15"
+        }
 
 # Configure OpenAI client with DeepSeek base URL
 client = OpenAI(
@@ -78,17 +86,80 @@ def task_breakdown():
     else:
         return jsonify({"error": "Failed to generate subtasks"}), 500
 
-@app.route('/tasks', methods=['GET'])
+
 def get_tasks():
     """
     Endpoint to fetch all tasks from MongoDB.
     """
     tasks = list(tasks_collection.find({}))
-    return jsonify(json_util.dumps(tasks))  # Use json_util to handle ObjectId serialization
+    print(tasks)  # Use json_util to handle ObjectId serialization
 
 @app.route('/')
 def index():
     return "Hello World"
 
+
+def check_in(task):
+    print(f"Checking in for task: {task['task']}")
+    current_day = datetime.now().date()
+    difference = (current_day - datetime.strptime(task['deadline'], "%Y-%m-%d").date()).days
+    if(difference < 0 ):
+        user_response = input(f"Are you working on '{task['task']}'? (yes/no): ")
+        if 'no' in user_response.lower():
+
+            reason = input("Why are you not doing it? ")
+            print(analyze_reason_and_motivate(task, reason))
+        else:
+            print("Good job continue what you are doing")
+    else:
+        prompt = f"User passed the deadline for the '{sample_task['task']}'. Urge him to do the task soon and explain that there are other pending tasks too and it would effect his final goal in a adverse way"
+        try:
+            response = client.chat.completions.create(
+                model="deepseek-chat",
+                messages=[
+                    {"role": "user", "content": prompt}
+                ],
+                max_tokens=500
+            )
+            print(response.choices[0].message.content)
+        except Exception as e:
+            print(f"Error calling DeepSeek API: {str(e)}")
+            return None     
+
+def analyze_reason_and_motivate(task, reason):
+    prompt = f"Iam is procrastinating on '{task['task']}' due to '{reason}'. Analyze if the reason is a strong and valid reason and if its not then motivate me dont talk like a third part just adress the message to the me directly"
+    try:
+            response = client.chat.completions.create(
+                model="deepseek-chat",
+                messages=[
+                    {"role": "user", "content": prompt}
+                ],
+                max_tokens=500
+            )
+            return response.choices[0].message.content
+    except Exception as e:
+            print(f"Error calling DeepSeek API: {str(e)}")
+            return None
+    
+
+# def update_streak(task_name):
+#     if task_name not in streaks:
+#         streaks[task_name] = 0
+#     streaks[task_name] += 1
+#     print(f"Great job! You're on a {streaks[task_name]} day streak for {task_name}!")
+
+def run_scheduler():
+
+    while True:
+        tasks = get_tasks()
+
+        schedule.every(1).minutes.do(check_in, task=tasks[0])
+        schedule.run_pending()
+        time.sleep(1)
+
 if __name__ == '__main__':
+
+    scheduler_thread = threading.Thread(target=run_scheduler)
+    scheduler_thread.start()
     app.run(debug=True)
+
