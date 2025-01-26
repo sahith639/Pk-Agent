@@ -1,23 +1,194 @@
+/* Global Styles */
 body {
-  font-family: Arial, sans-serif;
+  font-family: 'Arial', sans-serif;
+  background-color: #f4f4f9;
   margin: 0;
   padding: 0;
-  background-color: #f4f4f4;
-}
-
-h1 {
   color: #333;
 }
 
-ul {
-  list-style-type: none;
+/* Container for the App */
+.app-container {
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 20px;
+  background-color: #fff;
+  border-radius: 10px;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+
+/* Header */
+h1 {
+  text-align: center;
+  color: #4a90e2;
+  margin-bottom: 20px;
+}
+
+/* Input Field for Task */
+.task-input {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 20px;
+}
+
+.task-input input {
+  flex: 1;
+  padding: 10px;
+  border: 1px solid #ddd;
+  border-radius: 5px;
+  font-size: 16px;
+  margin-right: 10px;
+}
+
+.task-input button {
+  padding: 10px 20px;
+  background-color: #4a90e2;
+  color: #fff;
+  border: none;
+  border-radius: 5px;
+  font-size: 16px;
+  cursor: pointer;
+}
+
+.task-input button:hover {
+  background-color: #357abd;
+}
+
+/* Subtasks List */
+.subtasks-list {
+  margin-top: 20px;
+}
+
+.subtasks-list h2 {
+  color: #4a90e2;
+  margin-bottom: 10px;
+}
+
+.subtasks-list ul {
+  list-style: none;
   padding: 0;
 }
 
-li {
-  background: #fff;
-  margin: 10px 0;
-  padding: 10px;
+.subtasks-list li {
+  background-color: #f9f9f9;
+  padding: 15px;
+  border: 1px solid #ddd;
   border-radius: 5px;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  margin-bottom: 10px;
+  display: flex;
+  align-items: center;
+}
+
+.subtasks-list li input[type="checkbox"] {
+  margin-right: 10px;
+  cursor: pointer;
+}
+
+.subtasks-list li strong {
+  font-size: 18px;
+  color: #333;
+}
+
+.subtasks-list li p {
+  margin: 5px 0;
+  color: #666;
+}
+
+/* Check-In Modal */
+.check-in-modal {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background-color: #fff;
+  padding: 20px;
+  border-radius: 10px;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+  z-index: 1000;
+  width: 400px;
+  text-align: center;
+}
+
+.check-in-modal h2 {
+  color: #4a90e2;
+  margin-bottom: 10px;
+}
+
+.check-in-modal p {
+  color: #666;
+  margin-bottom: 20px;
+}
+
+.check-in-modal button {
+  padding: 10px 20px;
+  margin: 5px;
+  border: none;
+  border-radius: 5px;
+  font-size: 16px;
+  cursor: pointer;
+}
+
+.check-in-modal button.yes-button {
+  background-color: #4a90e2;
+  color: #fff;
+}
+
+.check-in-modal button.yes-button:hover {
+  background-color: #357abd;
+}
+
+.check-in-modal button.no-button {
+  background-color: #ff6b6b;
+  color: #fff;
+}
+
+.check-in-modal button.no-button:hover {
+  background-color: #ff4c4c;
+}
+
+.check-in-modal textarea {
+  width: 100%;
+  padding: 10px;
+  border: 1px solid #ddd;
+  border-radius: 5px;
+  margin-top: 10px;
+  font-size: 16px;
+}
+
+.check-in-modal .submit-button {
+  background-color: #4a90e2;
+  color: #fff;
+  margin-top: 10px;
+}
+
+.check-in-modal .submit-button:hover {
+  background-color: #357abd;
+}
+
+
+/* Subtasks Table */
+.subtasks-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 20px;
+}
+
+.subtasks-table th,
+.subtasks-table td {
+  padding: 12px;
+  text-align: left;
+  border-bottom: 1px solid #ddd;
+}
+
+.subtasks-table th {
+  background-color: #4a90e2;
+  color: #fff;
+}
+
+.subtasks-table tr:hover {
+  background-color: #f1f1f1;
+}
+
+.subtasks-table input[type="checkbox"] {
+  cursor: pointer;
 }

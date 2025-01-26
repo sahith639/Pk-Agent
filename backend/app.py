@@ -31,14 +31,6 @@ client = OpenAI(
 )
 
 
-def serialize_task(task):
-    """
-    Serialize MongoDB document to JSON, converting ObjectId to string.
-    """
-    if "_id" in task:
-        task["_id"] = str(task["_id"])
-    return task
-
 def generate_subtasks(user_input):
     """
     Use the DeepSeek API to generate subtasks based on the user's input.
@@ -81,26 +73,15 @@ def generate_subtasks(user_input):
     except Exception as e:
         print(f"Error calling DeepSeek API: {str(e)}")
         return None
-    
+
 
 @app.route("/breakdown", methods=["POST"])
 def task_breakdown():
     """
     Endpoint to handle task breakdown requests.
     """
-
-    if request.method == "OPTIONS":
-        # Handle preflight request
-        response = jsonify({"message": "Preflight request handled"})
-        response.headers.add("Access-Control-Allow-Origin", "http://localhost:3000")
-        response.headers.add("Access-Control-Allow-Headers", "Content-Type")
-        response.headers.add("Access-Control-Allow-Methods", "POST")
-        return response
-    
-
     if not request.is_json:
         return jsonify({"error": "Request must be JSON"}), 415  # 415 Unsupported Media Type
-    
 
     user_input = request.json.get("goal")
     if not user_input:
@@ -112,15 +93,13 @@ def task_breakdown():
         # Save the task and subtasks to MongoDB
         task_document = {
             "goal": user_input,
-            "subtasks": subtasks,  # Store subtasks as a JSON string
+            "subtasks": subtasks,  # Store subtasks as an array of objects
             "created_at": datetime.now(),
         }
         tasks_collection.insert_one(task_document)
 
-         # Return the newly generated subtasks in the response
-        response = jsonify({"message": "Task breakdown successful", "subtasks": subtasks})
-        response.headers.add("Access-Control-Allow-Origin", "http://localhost:3000")
-        return response
+        # Return the newly generated subtasks in the response
+        return jsonify({"message": "Task breakdown successful", "subtasks": subtasks})
     else:
         return jsonify({"error": "Failed to generate subtasks"}), 500
 
@@ -134,15 +113,8 @@ def get_tasks():
         tasks = list(tasks_collection.find({}))
         all_subtasks = []
         for task in tasks:
-            subtasks_json_string = task.get("subtasks")
-            if subtasks_json_string:
-                try:
-                    # Parse the JSON string and add subtasks to the list
-                    subtasks = json.loads(subtasks_json_string)
-                    all_subtasks.extend(subtasks)
-                except json.JSONDecodeError as e:
-                    print(f"Error parsing JSON for task {task['_id']}: {e}")
-                    continue  # Skip this task and continue with the next one
+            subtasks = task.get("subtasks", [])
+            all_subtasks.extend(subtasks)
         return jsonify(all_subtasks)  # Return the subtasks as a JSON response
     except Exception as e:
         print(f"Error fetching tasks: {str(e)}")
@@ -173,61 +145,98 @@ def delete_subtask():
     except Exception as e:
         print(f"Error deleting subtask: {str(e)}")
         return jsonify({"error": "Failed to delete subtask"}), 500
-    
 
 
-    
-@app.route("/")
-def index():
-    return "Hello World"
-
-
-def check_in(task):
+@app.route("/check-in", methods=["POST"])
+def check_in_endpoint():
     """
-    Function to check in on a task and provide reminders or motivation.
+    Endpoint to trigger a check-in for a task.
     """
-    print(f"Checking in for task: {task[0]['task']}")
-    current_day = datetime.now().date()
-    difference = (
-        current_day - datetime.strptime(task[0]["deadline"], "%Y-%m-%d").date()
-    ).days
-    if difference < 0:
-        user_response = input(f"Are you working on '{task[0]['task']}'? (yes/no): ")
-        if "no" in user_response.lower():
-            reason = input("Why are you not doing it? ")
-            print(analyze_reason_and_motivate(task, reason))
+    try:
+        # Get the task ID from the request
+        task_id = request.json.get("task_id")
+        if not task_id:
+            return jsonify({"error": "Task ID is required"}), 400
+
+        # Find the task in the database
+        task = tasks_collection.find_one({"_id": ObjectId(task_id)})
+        if not task:
+            return jsonify({"error": "Task not found"}), 404
+
+        # Perform the check-in
+        current_day = datetime.now().date()
+        deadline = datetime.strptime(task["deadline"], "%Y-%m-%d").date()
+        difference = (current_day - deadline).days
+
+        if difference < 0:
+            # Task is not overdue
+            return jsonify({
+                "message": "Check-in triggered",
+                "task": task["task"],
+                "status": "pending",
+                "deadline": task["deadline"]
+            })
         else:
-            print("Good job! Continue what you are doing.")
-    else:
-        prompt = f"User passed the deadline for the '{task[0]['task']}'. Urge them to do the task soon and explain that there are other pending tasks too, which would affect their final goal adversely."
+            # Task is overdue
+            prompt = f"User passed the deadline for the '{task['task']}'. Urge them to do the task soon and explain that there are other pending tasks too, which would affect their final goal adversely."
+            try:
+                response = client.chat.completions.create(
+                    model="deepseek-chat",
+                    messages=[{"role": "user", "content": prompt}],
+                    max_tokens=500,
+                )
+                return jsonify({
+                    "message": "Check-in triggered",
+                    "task": task["task"],
+                    "status": "overdue",
+                    "motivation": response.choices[0].message.content
+                })
+            except Exception as e:
+                print(f"Error calling DeepSeek API: {str(e)}")
+                return jsonify({"error": "Failed to generate motivation"}), 500
+
+    except Exception as e:
+        print(f"Error during check-in: {str(e)}")
+        return jsonify({"error": "Failed to perform check-in"}), 500
+
+
+@app.route("/analyze-reason", methods=["POST"])
+def analyze_reason_endpoint():
+    """
+    Endpoint to analyze the user's reason for procrastination and provide motivation.
+    """
+    try:
+        # Get the task ID and reason from the request
+        task_id = request.json.get("task_id")
+        reason = request.json.get("reason")
+        if not task_id or not reason:
+            return jsonify({"error": "Task ID and reason are required"}), 400
+
+        # Find the task in the database
+        task = tasks_collection.find_one({"_id": ObjectId(task_id)})
+        if not task:
+            return jsonify({"error": "Task not found"}), 404
+
+        # Analyze the reason and provide motivation
+        prompt = f"I am procrastinating on '{task['task']}' due to '{reason}'. Analyze if the reason is strong and valid. If it's not, motivate me directly."
         try:
             response = client.chat.completions.create(
                 model="deepseek-chat",
                 messages=[{"role": "user", "content": prompt}],
                 max_tokens=500,
             )
-            print(response.choices[0].message.content)
+            return jsonify({
+                "message": "Reason analyzed",
+                "motivation": response.choices[0].message.content
+            })
         except Exception as e:
             print(f"Error calling DeepSeek API: {str(e)}")
-            return None
+            return jsonify({"error": "Failed to generate motivation"}), 500
 
-
-def analyze_reason_and_motivate(task, reason):
-    """
-    Analyze the reason for procrastination and provide motivation.
-    """
-    prompt = f"I am procrastinating on '{task[0]['task']}' due to '{reason}'. Analyze if the reason is strong and valid. If it's not, motivate me directly."
-    try:
-        response = client.chat.completions.create(
-            model="deepseek-chat",
-            messages=[{"role": "user", "content": prompt}],
-            max_tokens=500,
-        )
-        return response.choices[0].message.content
     except Exception as e:
-        print(f"Error calling DeepSeek API: {str(e)}")
-        return None
-
+        print(f"Error analyzing reason: {str(e)}")
+        return jsonify({"error": "Failed to analyze reason"}), 500
+    
 
 # Scheduler setup
 scheduler_started = False
@@ -238,21 +247,35 @@ def run_scheduler():
     """
     Function to run the scheduler in a separate thread.
     """
-    global scheduler_started
-
-    # Use a lock to ensure the scheduler starts only once
-    with scheduler_lock:
-        if not scheduler_started:
+    def check_in_job():
+        try:
+            # Fetch all tasks from the database
             tasks = list(tasks_collection.find({}))
-            print("Scheduling check_in job...")  # Debug message
-            if tasks:
-                schedule.every(2).minutes.do(check_in, task=tasks)
-            scheduler_started = True
+            for task in tasks:
+                # Trigger a check-in for each task
+                current_day = datetime.now().date()
+                deadline = datetime.strptime(task["deadline"], "%Y-%m-%d").date()
+                difference = (current_day - deadline).days
 
+                if difference < 0:
+                    print(f"Checking in for task: {task['task']}")
+                else:
+                    print(f"Task '{task['task']}' is overdue!")
+
+        except Exception as e:
+            print(f"Error during scheduled check-in: {str(e)}")
+
+    # Schedule the check-in job to run every 2 minutes
+    schedule.every(2).minutes.do(check_in_job)
+
+    # Run the scheduler
     while True:
-        # Run scheduled tasks
         schedule.run_pending()
         time.sleep(1)
+
+# Start the scheduler in a separate thread
+scheduler_thread = threading.Thread(target=run_scheduler, daemon=True)
+scheduler_thread.start()
 
 
 if __name__ == "__main__":
