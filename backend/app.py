@@ -86,7 +86,7 @@ def task_breakdown():
     else:
         return jsonify({"error": "Failed to generate subtasks"}), 500
 
-
+@app.route("/subtasks")
 def get_tasks():
     """
     Endpoint to fetch all tasks from MongoDB.
