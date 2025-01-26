@@ -158,20 +158,30 @@ def analyze_reason_and_motivate(task, reason):
 #     streaks[task_name] += 1
 #     print(f"Great job! You're on a {streaks[task_name]} day streak for {task_name}!")
 
+scheduler_started = False
+scheduler_lock = threading.Lock()
 
 def run_scheduler():
-    tasks = get_tasks()
-    print(tasks)
+    global scheduler_started
 
-    schedule.every(1).minutes.do(check_in, task=tasks)
+    # Use a lock to ensure the scheduler starts only once
+    with scheduler_lock:
+        if not scheduler_started:
+            tasks = get_tasks()
+            print("Scheduling check_in job...")  # Debug message
+            schedule.every(2).minutes.do(check_in, task=tasks)
+            scheduler_started = True
+
     while True:
-
+        # Run scheduled tasks
         schedule.run_pending()
         time.sleep(1)
 
-
 if __name__ == "__main__":
+    # Start the scheduler thread only if it hasn't been started yet
+    if not scheduler_started:
+        scheduler_thread = threading.Thread(target=run_scheduler, daemon=True)
+        scheduler_thread.start()
 
-    scheduler_thread = threading.Thread(target=run_scheduler)
-    scheduler_thread.start()
-    app.run(debug=True)
+    # Start Flask app
+    app.run(debug=True, use_reloader=False)
