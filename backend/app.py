@@ -5,12 +5,14 @@ import time
 from flask import Flask, request, jsonify
 import os
 from dotenv import load_dotenv
-from openai import OpenAI
 from pymongo import MongoClient
 from bson import json_util  # To handle JSON serialization
 from datetime import datetime
 import json
+from openai import OpenAI
+
 load_dotenv()
+
 
 app = Flask(__name__)
 
@@ -103,8 +105,6 @@ def get_tasks():
         return jsonify({"error": "Failed to fetch tasks"}), 500
 
 
-
-
 @app.route("/")
 def index():
     return "Hello World"
@@ -158,13 +158,14 @@ def analyze_reason_and_motivate(task, reason):
 #     streaks[task_name] += 1
 #     print(f"Great job! You're on a {streaks[task_name]} day streak for {task_name}!")
 
+
 def run_scheduler():
     tasks = get_tasks()
     print(tasks)
 
     schedule.every(1).minutes.do(check_in, task=tasks)
     while True:
-        
+
         schedule.run_pending()
         time.sleep(1)
 

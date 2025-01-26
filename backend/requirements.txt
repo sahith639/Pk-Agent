@@ -1,0 +1,6 @@
+# requirements.txt
+Flask==2.3.3
+openai>=1.0.0
+schedule==1.2.0
+python-dotenv==1.0.0
+pymongo==4.5.0
