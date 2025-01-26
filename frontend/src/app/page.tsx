@@ -7,7 +7,7 @@ export default function Home() {
   const [subtasks, setSubtasks] = useState([]); // State to store fetched subtasks
 
   // Function to handle task submission
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
 
     try {
@@ -20,18 +20,20 @@ export default function Home() {
         body: JSON.stringify({ goal: task }),
       });
 
-      if (response.ok) {
-        const data = await response.json();
-        console.log('Task Submission Response:', data); // Log the response
-        setSubtasks(data); // Update subtasks with the response
-        setTask(""); // Clear the input field
+      if (!response.ok) {
+        throw new Error("Failed to submit task");
+      }
 
-        // fetchSubtasks();
-      } else {
-        console.error("Failed to submit task");
+      const data = await response.json();
+      console.log("Task Submission Response:", data);
+
+      if (data.subtasks) {
+        // Update the subtasks state with the newly generated subtasks
+        setSubtasks(data.subtasks);
+        setTask(""); // Clear the input field
       }
     } catch (error) {
-      console.error("Error submitting task:", error);
+      console.error("Error:", error);
     }
   };
 
@@ -39,6 +41,10 @@ export default function Home() {
   const fetchSubtasks = async () => {
     try {
       const response = await fetch("http://127.0.0.1:5000/subtasks");
+      if (!response.ok) {
+        throw new Error("Failed to fetch subtasks");
+      }
+
       const data = await response.json();
 
       // Ensure data is an array
@@ -81,7 +87,7 @@ export default function Home() {
       {/* Display fetched subtasks */}
       <div style={{ marginTop: "20px" }}>
         <h2>Subtasks</h2>
-        {Array.isArray(subtasks) ? (
+        {subtasks.length > 0 ? (
           <ul>
             {subtasks.map((subtask, index) => (
               <li key={index} style={{ marginBottom: "10px" }}>

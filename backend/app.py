@@ -1,4 +1,3 @@
-# app.py
 import schedule
 import threading
 import time
@@ -11,27 +10,34 @@ from datetime import datetime
 import json
 from openai import OpenAI
 from flask_cors import CORS  # Import CORS
+from bson import ObjectId
 
+# Load environment variables
 load_dotenv()
 
-
+# Initialize Flask app
 app = Flask(__name__)
 CORS(app)  # Enable CORS for all routes
+
 # Configure MongoDB client
 mongo_uri = os.getenv("MONGO_URI")
 mongo_client = MongoClient(mongo_uri)
 db = mongo_client["pk-agent"]  # Database name
 tasks_collection = db["tasks"]  # Collection for storing tasks
-sample_task = {
-    "task": "Review the homework instructions and gather all necessary materials",
-    "time_required": "30 minutes",
-    "deadline": "2023-10-15",
-}
 
 # Configure OpenAI client with DeepSeek base URL
 client = OpenAI(
     api_key=os.getenv("DEEPSEEK_API_KEY"), base_url="https://api.deepseek.com"
 )
+
+
+def serialize_task(task):
+    """
+    Serialize MongoDB document to JSON, converting ObjectId to string.
+    """
+    if "_id" in task:
+        task["_id"] = str(task["_id"])
+    return task
 
 
 def generate_subtasks(user_input):
@@ -56,9 +62,20 @@ def generate_subtasks(user_input):
         response = client.chat.completions.create(
             model="deepseek-chat",
             messages=[{"role": "user", "content": prompt}],
-            max_tokens=500,
+            max_tokens=1000,
         )
-        return response.choices[0].message.content
+        # Print the raw response for debugging
+        raw_response = response.choices[0].message.content
+        print("DeepSeek API Raw Response:", raw_response)
+
+        # Attempt to parse the response as JSON
+        try:
+            subtasks = json.loads(raw_response)
+            return subtasks
+        except json.JSONDecodeError as e:
+            print(f"Error parsing JSON response from DeepSeek API: {e}")
+            print("Raw Response:", raw_response)  # Print the raw response for debugging
+            return None
     except Exception as e:
         print(f"Error calling DeepSeek API: {str(e)}")
         return None
@@ -79,22 +96,16 @@ def task_breakdown():
         # Save the task and subtasks to MongoDB
         task_document = {
             "goal": user_input,
-            "subtasks": subtasks,
+            "subtasks": json.dumps(subtasks),  # Store subtasks as a JSON string
             "created_at": datetime.now(),
         }
         tasks_collection.insert_one(task_document)
 
-        all_tasks = list(tasks_collection.find({}))
-        all_subtasks = []
-        for task in all_tasks:
-            subtasks_json_string = task.get("subtasks")
-            if subtasks_json_string:
-                subtasks = json.loads(subtasks_json_string)
-                all_subtasks.extend(subtasks)
-        
-        return jsonify(all_subtasks)
+        # Return the newly generated subtasks in the response
+        return jsonify({"message": "Task breakdown successful", "subtasks": subtasks})
     else:
         return jsonify({"error": "Failed to generate subtasks"}), 500
+
 
 @app.route("/subtasks")
 def get_tasks():
@@ -107,12 +118,17 @@ def get_tasks():
         for task in tasks:
             subtasks_json_string = task.get("subtasks")
             if subtasks_json_string:
-                subtasks = json.loads(subtasks_json_string)
-                all_subtasks.extend(subtasks)
-        return all_subtasks
+                try:
+                    # Parse the JSON string and add subtasks to the list
+                    subtasks = json.loads(subtasks_json_string)
+                    all_subtasks.extend(subtasks)
+                except json.JSONDecodeError as e:
+                    print(f"Error parsing JSON for task {task['_id']}: {e}")
+                    continue  # Skip this task and continue with the next one
+        return jsonify(all_subtasks)  # Return the subtasks as a JSON response
     except Exception as e:
         print(f"Error fetching tasks: {str(e)}")
-        return ({"error": "Failed to fetch tasks"}), 500
+        return jsonify({"error": "Failed to fetch tasks"}), 500
 
 
 @app.route("/")
@@ -121,6 +137,9 @@ def index():
 
 
 def check_in(task):
+    """
+    Function to check in on a task and provide reminders or motivation.
+    """
     print(f"Checking in for task: {task[0]['task']}")
     current_day = datetime.now().date()
     difference = (
@@ -129,13 +148,12 @@ def check_in(task):
     if difference < 0:
         user_response = input(f"Are you working on '{task[0]['task']}'? (yes/no): ")
         if "no" in user_response.lower():
-
             reason = input("Why are you not doing it? ")
             print(analyze_reason_and_motivate(task, reason))
         else:
-            print("Good job continue what you are doing")
+            print("Good job! Continue what you are doing.")
     else:
-        prompt = f"User passed the deadline for the '{task[0]['task']}'. Urge him to do the task soon and explain that there are other pending tasks too and it would effect his final goal in a adverse way"
+        prompt = f"User passed the deadline for the '{task[0]['task']}'. Urge them to do the task soon and explain that there are other pending tasks too, which would affect their final goal adversely."
         try:
             response = client.chat.completions.create(
                 model="deepseek-chat",
@@ -149,7 +167,10 @@ def check_in(task):
 
 
 def analyze_reason_and_motivate(task, reason):
-    prompt = f"Iam is procrastinating on '{task[0]['task']}' due to '{reason}'. Analyze if the reason is a strong and valid reason and if its not then motivate me dont talk like a third part just adress the message to the me directly"
+    """
+    Analyze the reason for procrastination and provide motivation.
+    """
+    prompt = f"I am procrastinating on '{task[0]['task']}' due to '{reason}'. Analyze if the reason is strong and valid. If it's not, motivate me directly."
     try:
         response = client.chat.completions.create(
             model="deepseek-chat",
@@ -162,30 +183,31 @@ def analyze_reason_and_motivate(task, reason):
         return None
 
 
-# def update_streak(task_name):
-#     if task_name not in streaks:
-#         streaks[task_name] = 0
-#     streaks[task_name] += 1
-#     print(f"Great job! You're on a {streaks[task_name]} day streak for {task_name}!")
-
+# Scheduler setup
 scheduler_started = False
 scheduler_lock = threading.Lock()
 
+
 def run_scheduler():
+    """
+    Function to run the scheduler in a separate thread.
+    """
     global scheduler_started
 
     # Use a lock to ensure the scheduler starts only once
     with scheduler_lock:
         if not scheduler_started:
-            tasks = get_tasks()
+            tasks = list(tasks_collection.find({}))
             print("Scheduling check_in job...")  # Debug message
-            schedule.every(2).minutes.do(check_in, task=tasks)
+            if tasks:
+                schedule.every(2).minutes.do(check_in, task=tasks)
             scheduler_started = True
 
     while True:
         # Run scheduled tasks
         schedule.run_pending()
         time.sleep(1)
+
 
 if __name__ == "__main__":
     # Start the scheduler thread only if it hasn't been started yet
