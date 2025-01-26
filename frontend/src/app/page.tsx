@@ -21,7 +21,7 @@ export default function Home() {
       });
 
       if (!response.ok) {
-        throw new Error("Failed to submit task");
+        throw new Error(`Failed to submit task: ${response.statusText}`);
       }
 
       const data = await response.json();
@@ -34,6 +34,7 @@ export default function Home() {
       }
     } catch (error) {
       console.error("Error:", error);
+      alert(`Error: ${error.message}`);
     }
   };
 
@@ -42,7 +43,7 @@ export default function Home() {
     try {
       const response = await fetch("http://127.0.0.1:5000/subtasks");
       if (!response.ok) {
-        throw new Error("Failed to fetch subtasks");
+        throw new Error(`Failed to fetch subtasks: ${response.statusText}`);
       }
 
       const data = await response.json();
@@ -57,6 +58,32 @@ export default function Home() {
     } catch (error) {
       console.error("Error fetching subtasks:", error);
       setSubtasks([]); // Set to an empty array to avoid errors
+    }
+  };
+
+  // Function to handle subtask deletion
+  const handleDeleteSubtask = async (subtaskId) => {
+    try {
+      // Send the subtask ID to the backend for deletion
+      const response = await fetch("http://127.0.0.1:5000/delete-subtask", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ subtask_id: subtaskId }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to delete subtask: ${response.statusText}`);
+      }
+
+      // Remove the deleted subtask from the frontend state
+      setSubtasks((prevSubtasks) =>
+        prevSubtasks.filter((subtask) => subtask._id !== subtaskId)
+      );
+    } catch (error) {
+      console.error("Error deleting subtask:", error);
+      alert("An error occurred while deleting the subtask. Please try again.");
     }
   };
 
@@ -91,6 +118,11 @@ export default function Home() {
           <ul>
             {subtasks.map((subtask, index) => (
               <li key={index} style={{ marginBottom: "10px" }}>
+                <input
+                  type="checkbox"
+                  onChange={() => handleDeleteSubtask(subtask._id)}
+                  style={{ marginRight: "10px" }}
+                />
                 <strong>{subtask.task}</strong>
                 <p>Time Required: {subtask.time_required}</p>
                 <p>Deadline: {subtask.deadline}</p>

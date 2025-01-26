@@ -17,7 +17,7 @@ load_dotenv()
 
 # Initialize Flask app
 app = Flask(__name__)
-CORS(app)  # Enable CORS for all routes
+CORS(app, origins=["http://localhost:3000"])  # Enable CORS for all routes
 
 # Configure MongoDB client
 mongo_uri = os.getenv("MONGO_URI")
@@ -38,7 +38,6 @@ def serialize_task(task):
     if "_id" in task:
         task["_id"] = str(task["_id"])
     return task
-
 
 def generate_subtasks(user_input):
     """
@@ -71,6 +70,9 @@ def generate_subtasks(user_input):
         # Attempt to parse the response as JSON
         try:
             subtasks = json.loads(raw_response)
+            # Add a unique _id field to each subtask
+            for subtask in subtasks:
+                subtask["_id"] = str(ObjectId())  # Generate a new ObjectId
             return subtasks
         except json.JSONDecodeError as e:
             print(f"Error parsing JSON response from DeepSeek API: {e}")
@@ -79,13 +81,27 @@ def generate_subtasks(user_input):
     except Exception as e:
         print(f"Error calling DeepSeek API: {str(e)}")
         return None
-
+    
 
 @app.route("/breakdown", methods=["POST"])
 def task_breakdown():
     """
     Endpoint to handle task breakdown requests.
     """
+
+    if request.method == "OPTIONS":
+        # Handle preflight request
+        response = jsonify({"message": "Preflight request handled"})
+        response.headers.add("Access-Control-Allow-Origin", "http://localhost:3000")
+        response.headers.add("Access-Control-Allow-Headers", "Content-Type")
+        response.headers.add("Access-Control-Allow-Methods", "POST")
+        return response
+    
+
+    if not request.is_json:
+        return jsonify({"error": "Request must be JSON"}), 415  # 415 Unsupported Media Type
+    
+
     user_input = request.json.get("goal")
     if not user_input:
         return jsonify({"error": "No goal provided"}), 400
@@ -96,13 +112,15 @@ def task_breakdown():
         # Save the task and subtasks to MongoDB
         task_document = {
             "goal": user_input,
-            "subtasks": json.dumps(subtasks),  # Store subtasks as a JSON string
+            "subtasks": subtasks,  # Store subtasks as a JSON string
             "created_at": datetime.now(),
         }
         tasks_collection.insert_one(task_document)
 
-        # Return the newly generated subtasks in the response
-        return jsonify({"message": "Task breakdown successful", "subtasks": subtasks})
+         # Return the newly generated subtasks in the response
+        response = jsonify({"message": "Task breakdown successful", "subtasks": subtasks})
+        response.headers.add("Access-Control-Allow-Origin", "http://localhost:3000")
+        return response
     else:
         return jsonify({"error": "Failed to generate subtasks"}), 500
 
@@ -131,6 +149,34 @@ def get_tasks():
         return jsonify({"error": "Failed to fetch tasks"}), 500
 
 
+@app.route("/delete-subtask", methods=["POST"])
+def delete_subtask():
+    """
+    Endpoint to delete a subtask from the database.
+    """
+    try:
+        # Get the subtask ID from the request
+        subtask_id = request.json.get("subtask_id")
+        if not subtask_id:
+            return jsonify({"error": "Subtask ID is required"}), 400
+
+        # Find the task containing the subtask and remove the subtask
+        result = tasks_collection.update_many(
+            {},  # Search all documents
+            {"$pull": {"subtasks": {"_id": subtask_id}}}  # Remove the subtask with the matching ID
+        )
+
+        if result.modified_count > 0:
+            return jsonify({"message": "Subtask deleted successfully"})
+        else:
+            return jsonify({"error": "Subtask not found"}), 404
+    except Exception as e:
+        print(f"Error deleting subtask: {str(e)}")
+        return jsonify({"error": "Failed to delete subtask"}), 500
+    
+
+
+    
 @app.route("/")
 def index():
     return "Hello World"
