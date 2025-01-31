@@ -1,10 +1,26 @@
-/* Global Styles */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --foreground-rgb: 0, 0, 0;
+  --background-start-rgb: 214, 219, 220;
+  --background-end-rgb: 255, 255, 255;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --foreground-rgb: 255, 255, 255;
+    --background-start-rgb: 0, 0, 0;
+    --background-end-rgb: 0, 0, 0;
+  }
+}
+
 body {
-  font-family: 'Arial', sans-serif;
-  background-color: #f4f4f9;
+  color: rgb(var(--foreground-rgb));
+  background: rgb(var(--background-start-rgb));
   margin: 0;
   padding: 0;
-  color: #333;
 }
 
 /* Container for the App */
@@ -165,7 +181,6 @@ h1 {
   background-color: #357abd;
 }
 
-
 /* Subtasks Table */
 .subtasks-table {
   width: 100%;
@@ -191,4 +206,92 @@ h1 {
 
 .subtasks-table input[type="checkbox"] {
   cursor: pointer;
+}
+
+/* Modal Styles */
+.modal {
+  @apply fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50;
+}
+
+.modal-content {
+  @apply bg-white rounded-xl shadow-xl p-6 max-w-md w-full;
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #888;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #666;
+}
+
+/* Animations */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideUp {
+  from { transform: translateY(10px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.3s ease-in-out;
+}
+
+.animate-slide-up {
+  animation: slideUp 0.3s ease-in-out;
+}
+
+/* Focus Styles */
+*:focus {
+  outline: none;
+}
+
+*:focus-visible {
+  @apply ring-2 ring-blue-500 ring-offset-2;
+}
+
+/* Button Hover Effects */
+button {
+  @apply transition-all duration-200;
+}
+
+button:hover {
+  @apply transform scale-[1.02];
+}
+
+button:active {
+  @apply transform scale-[0.98];
+}
+
+/* Input Styles */
+textarea {
+  @apply transition-all duration-200;
+}
+
+textarea:focus {
+  @apply ring-2 ring-blue-500 ring-offset-0 border-transparent;
+}
+
+/* Card Hover Effects */
+.hover-card {
+  @apply transition-all duration-200;
+}
+
+.hover-card:hover {
+  @apply transform -translate-y-1 shadow-lg;
 }
